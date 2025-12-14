@@ -1,0 +1,7 @@
+[server]
+# Biarkan default jika tidak ada masalah spesifik server
+
+[runner]
+# Paksa Streamlit menggunakan versi Python yang lebih stabil
+# Coba 3.9 dulu, jika gagal, coba 3.10.
+python_version = "3.9"
