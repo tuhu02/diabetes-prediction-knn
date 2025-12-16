@@ -21,7 +21,7 @@ def load_assets():
     try:
         # Tentukan path file relatif terhadap direktori aplikasi
         base_path = Path(__file__).parent
-        model_path = base_path / 'knn_model.pkl'
+        model_path = base_path / 'knnmodel.pkl'
         scaler_path = base_path / 'scaler.pkl'
         
         # Memastikan file ada
@@ -44,7 +44,7 @@ def load_assets():
 
 knn_model, scaler = load_assets()
 
-# --- 2. Fungsi Preprocessing (Harus sama persis dengan saat pelatihan) ---
+# --- 2. Fungsi Preprocessing (DIJAMIN SAMA dengan Saat Pelatihan BARU) ---
 
 def preprocess_input(data: dict, scaler: StandardScaler) -> pd.DataFrame:
     """Mengubah data input pengguna menjadi format yang siap diprediksi (encoding & scaling)."""
@@ -52,12 +52,12 @@ def preprocess_input(data: dict, scaler: StandardScaler) -> pd.DataFrame:
     # 1. Konversi input dictionary menjadi DataFrame
     input_df = pd.DataFrame([data])
     
-    # 2. One-Hot Encoding (sesuai data latih, drop_first=True)
+    # 2. One-Hot Encoding
     
-    # Gender (Male menjadi 1, Female menjadi 0 karena Female adalah baseline yang dihapus)
+    # Gender (Male menjadi 1, Female menjadi 0)
     input_df['gender_Male'] = np.where(input_df['gender'] == 'Male', 1, 0)
     
-    # Smoking History (Jika tidak ada di list ini, diasumsikan sebagai kategori yang dihapus/baseline 'No Info')
+    # Smoking History (Jika 'No Info' adalah baseline, maka semua kolom ini akan 0)
     input_df['smoking_history_current'] = np.where(input_df['smoking_history'] == 'current', 1, 0)
     input_df['smoking_history_ever'] = np.where(input_df['smoking_history'] == 'ever', 1, 0)
     input_df['smoking_history_former'] = np.where(input_df['smoking_history'] == 'former', 1, 0)
@@ -67,18 +67,21 @@ def preprocess_input(data: dict, scaler: StandardScaler) -> pd.DataFrame:
     # Hapus kolom kategorikal asli
     input_df = input_df.drop(['gender', 'smoking_history'], axis=1)
     
-    # 3. Scaling (hanya pada kolom numerik)
-    num_cols = ['age', 'bmi', 'HbA1c_level', 'blood_glucose_level']
-    input_df[num_cols] = scaler.transform(input_df[num_cols])
-    
-    # 4. Memastikan urutan kolom sama persis dengan X_train
+    # Memastikan semua kolom ada (Termasuk yang biner/boolean, karena scaler dilatih pada semua fitur)
     final_cols = ['age', 'hypertension', 'heart_disease', 'bmi', 
                   'HbA1c_level', 'blood_glucose_level', 'gender_Male', 
                   'smoking_history_current', 'smoking_history_ever', 
                   'smoking_history_former', 'smoking_history_never', 
                   'smoking_history_not current']
     
-    return input_df[final_cols]
+    # PENTING: Gunakan hanya kolom yang dibutuhkan, lalu pastikan tipe datanya benar
+    input_df = input_df[final_cols].astype('float64') # Mengubah tipe data ke float64
+    
+    # 3. Scaling (Sekarang kita scale SEMUA KOLOM karena scaler BARU dilatih pada semua kolom)
+    # Scaler yang baru dilatih pada notebook sudah mencakup semua fitur
+    input_processed_scaled = scaler.transform(input_df)
+    
+    return pd.DataFrame(input_processed_scaled, columns=final_cols)
 
 
 # --- 3. Antarmuka Streamlit (UI) ---
@@ -123,8 +126,12 @@ if submit_button:
     }
     
     # 2. Preprocess
-    input_processed = preprocess_input(raw_data, scaler)
-    
+    try:
+        input_processed = preprocess_input(raw_data, scaler)
+    except Exception as e:
+        st.error(f"Gagal memproses input: {e}")
+        st.stop()
+        
     # 3. Prediksi dan Probabilitas
     prediction = knn_model.predict(input_processed)[0]
     prediction_proba = knn_model.predict_proba(input_processed)[0]
@@ -143,5 +150,5 @@ if submit_button:
                   value=f"{prediction_proba[0]*100:.2f}%")
         st.caption("Hasil menunjukkan risiko rendah berdasarkan model, namun pemeriksaan rutin tetap dianjurkan.")
 
-    st.subheader("Detail Data yang Digunakan")
-    st.json(raw_data)
+    st.subheader("Detail Data yang Digunakan (Scaled)")
+    st.dataframe(input_processed)
